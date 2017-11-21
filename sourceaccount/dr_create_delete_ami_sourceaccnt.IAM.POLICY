@@ -1,0 +1,46 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Stmt1485544925000",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateImage",
+                "ec2:CreateTags",
+                "ec2:DeregisterImage",
+                "ec2:DescribeImages",
+                "ec2:DescribeInstances",
+                "ec2:DescribeSnapshots",
+                "ec2:DescribeSnapshotAttribute",
+                "ec2:DeleteSnapshot",
+                "ec2:ModifyImageAttribute",
+                "ec2:ModifySnapshotAttribute",
+                "ec2:CopyImage",
+                "ec2:DescribeImageAttribute"
+            ],
+            "Resource": [
+                "*"
+            ]
+        },
+        {
+            "Sid": "Stmt1485983393000",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ChangeMessageVisibility",
+                "sqs:DeleteMessage",
+                "sqs:DeleteMessageBatch",
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl",
+                "sqs:ListDeadLetterSourceQueues",
+                "sqs:ListQueues",
+                "sqs:ReceiveMessage",
+                "sqs:SendMessage",
+                "sqs:SendMessageBatch"
+            ],
+            "Resource": [
+                "arn:aws:sqs:us-east-1:SOURCEACCOUNT-NO:dr_amibackup_pending_permission",
+                "arn:aws:sqs:us-east-1:SOURCEACCOUNT-NO:dr_amibackup_pending_copy"
+            ]
+        }
+	]
+}

@@ -1,0 +1,14 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+       {
+            "Sid": "Stmt1485983393000",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:*"
+            ],
+            "Resource": [
+                "arn:aws:sqs:us-east-1:SOURCEAWSACCOUNT-NO:dr_amibackup_pending_copy"
+            ]
+        }
+    ]

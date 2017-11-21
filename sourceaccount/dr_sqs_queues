@@ -1,0 +1,2 @@
+aws sqs create-queue --queue-name dr_amibackup_pending_copy
+aws sqs create-queue --queue-name dr_amibackup_pending_permission 

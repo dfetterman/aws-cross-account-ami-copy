@@ -1,0 +1,161 @@
+# This was originally created buy R. Kozora, but has since been heavily modified by
+# Dane Fetterman
+
+# This script will search for all instances having a tag with "Backup" or "backup"
+# on it. As soon as we have the instances list, we loop through each instance
+# and create an AMI of it. Also, it will look for a "Retention" tag key which
+# will be used as a retention policy number in days.
+#
+# After creating the AMI it creates a "DeleteOn" tag on the AMI indicating when
+# it will be deleted using the Retention value and another Lambda function
+#
+# Finally, it will send information about the newly crated AMI to a queue
+# for additional processing
+
+import boto3
+import collections
+import datetime
+import sys
+import pprint
+
+# Get the service resource
+sqs = boto3.resource('sqs')
+ec = boto3.client('ec2')
+
+
+def lambda_handler(event, context):
+    # Get instances that should be backed up
+    reservations = ec.describe_instances(
+        Filters=[
+            {'Name': 'tag-key', 'Values': ['backup', 'Backup']},
+            {
+                'Name': 'tag-value',
+                'Values': [
+                    'true',
+                    'yes',
+                ]
+            },
+        ]
+    ).get(
+        'Reservations', []
+    )
+
+    instances = sum(
+        [
+            [i for i in r['Instances']]
+            for r in reservations
+            ], [])
+
+    print "Found %d instances that need backing up" % len(instances)
+
+    to_tag = collections.defaultdict(list)
+
+    for instance in instances:
+        try:
+            retention_days = [
+                int(t.get('Value')) for t in instance['Tags']
+                if t['Key'] == 'Retention'][0]
+        except IndexError:
+            retention_days = 3
+            create_time = datetime.datetime.now()
+            create_fmt = create_time.strftime('%Y-%m-%d')
+
+            # Get instance "Name" tag value
+            # I need this to put the instance Name to be in the ami description
+            gettagname = instance['Tags']
+            for i in gettagname:
+                print "This instance has the following tags %r" % i
+            for tag in gettagname:
+                if 'Name' in tag['Key']:
+                    instancename = tag['Value']
+                    print 'We will use the following name tag:'
+                    print instancename
+
+            # This creates the actual image
+            AMIid = ec.create_image(InstanceId=instance['InstanceId'], Name="Lambda - " + instance[
+                'InstanceId'] + " from " + instancename + " " + create_fmt,
+                                    Description="Lambda created AMI of instance " + instance[
+                                        'InstanceId'] + " from " + create_fmt, NoReboot=True, DryRun=False)
+
+            # print a lot of instance details
+            # pprint.pprint(instance)
+
+
+            to_tag[retention_days].append(AMIid['ImageId'])
+
+            print "Retaining AMI %s of instance %s for %d days" % (
+                AMIid['ImageId'],
+                instance['InstanceId'],
+                retention_days,
+            )
+            print 'this output is part of a great big loop'
+            # Send AMI ID and Snapshot ID to queue for permissions processing
+            queue = sqs.get_queue_by_name(QueueName='dr_amibackup_pending_permission')
+            ##get image id
+            myimageid = AMIid['ImageId']
+            # print 'my image id is:'
+            # print myimageid
+            ##get snapshot id
+            myimagedetails = ec.describe_images(
+                ImageIds=[
+                    myimageid,
+                ]
+            )
+            print 'value of myimagedetails:'
+            print myimagedetails
+
+            # This is kind of a duplicate variable but ordering plays a part here, refactor later
+            # get the value that we will apply to the DeleteOn tag
+            delete_date1 = datetime.date.today() + datetime.timedelta(days=retention_days)
+            delete_fmt1 = delete_date1.strftime('%m-%d-%Y')
+            # Set image name details to be passed to sqs
+            imagenametosqs = "Lambda - " + instance['InstanceId'] + " from " + instancename + " " + create_fmt
+            # print imagenametosqs
+            # set imagedescription variable which we'll pass to sqs
+            imagedescription = "Lambda created AMI of instance " + instance['InstanceId'] + " from " + create_fmt
+            # print imagedescription
+            #            mysnapid = myimagedetails['block-device-mapping.snapshot-id']
+            ##insert snapshot id and image id into queue
+            response = queue.send_message(MessageBody='AMI Created that needs cross-account repli', MessageAttributes={
+                'AMIID': {
+                    'StringValue': '{0}'.format(myimageid),
+                    'DataType': 'String'
+                },
+                'IMAGEDESCRIPTION': {
+                    'StringValue': '{0}'.format(imagedescription),
+                    'DataType': 'String'
+                },
+                'IMAGENAME': {
+                    'StringValue': '{0}'.format(imagenametosqs),
+                    'DataType': 'String'
+                },
+                'TAGDELETEON': {
+                    'StringValue': '{0}'.format(delete_fmt1),
+                    'DataType': 'String'
+                }
+            })
+            print 'Values added to queue, we got this response:'
+            print(response.get('MessageId'))
+            print(response.get('MD5OfMessageBody'))
+
+    print "Printing to_tag.keys() to review output:"
+    print to_tag.keys()
+
+    for retention_days in to_tag.keys():
+        delete_date = datetime.date.today() + datetime.timedelta(days=retention_days)
+        delete_fmt = delete_date.strftime('%m-%d-%Y')
+        print "Will delete %d AMIs on %s" % (len(to_tag[retention_days]), delete_fmt)
+
+        # break
+
+        print "Validating that the ec.create_tags function runs and printing the delete_fmt value:"
+        print delete_fmt
+        ec.create_tags(
+            Resources=to_tag[retention_days],
+            Tags=[
+                {'Key': 'DeleteOn', 'Value': delete_fmt},
+                {'Key': 'CrossAccntRepli', 'Value': 'true'},
+            ]
+        )
+
+

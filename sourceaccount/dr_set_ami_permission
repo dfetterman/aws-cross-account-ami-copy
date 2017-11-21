@@ -1,0 +1,153 @@
+# Step 2
+# This function sets the permission of an ami and snapshot to permit a destination aws account to access it.
+# It pulls from a queue to determine which ami to apply permissions to
+# This is a function is separate from the crate ami/snapshot function
+# because when creating an ami/snapshot, it could be in a pending state for
+# a longer period of time than what we'd like to allow a lambda function to run for.
+
+import boto3
+
+
+# Get the service resource
+sqs = boto3.resource('sqs')
+ec = boto3.client('ec2')
+
+
+# going to use this to get image state, then if state is pending, not delete from queue
+# ec2 = boto3.resource('ec2')
+
+def lambda_handler(event, context):
+    # define source and destination AWS accounts:
+    sourceawsaccount = 'SOURCEAWSACCOUNT-NO'
+    destinationawsaccount = 'DESTINATIONAWSACCOUNT-NO'
+
+    while True:
+        # Get the queue
+        queue = sqs.get_queue_by_name(QueueName='dr_amibackup_pending_permission')
+        imagename = 'novarset'
+        imagedescription = 'novarset'
+        tagdeleteon = 'novarset'
+        for message in queue.receive_messages(
+                MessageAttributeNames=['AMIID', 'IMAGEDESCRIPTION', 'IMAGENAME', 'TAGDELETEON']):
+            ami_text = 'NO AMI ID ATTRIBUTE IN THIS MESSAGE'
+            imagedescription = message.message_attributes.get('IMAGEDESCRIPTION').get('StringValue')
+            global imagedescription
+            imagename = message.message_attributes.get('IMAGENAME').get('StringValue')
+            tagdeleteon = message.message_attributes.get('TAGDELETEON').get('StringValue')
+            if message.message_attributes is not None:
+                ami_id = message.message_attributes.get('AMIID').get('StringValue')
+                if ami_id:
+                    ami_text = '{0}'.format(ami_id)
+                    global ami_text
+        message.delete()
+        print "-------------"
+        print 'Begin variables from sqs:'
+        print imagedescription
+        print imagename
+        print tagdeleteon
+        print 'End variables from sqs'
+        if imagedescription is 'novarset':
+            print 'No messages left in queue, breaking'
+            break
+        print "-------------"
+        # print('Hello, {0}! ({1})'.format(message.body, ami_text))
+
+        print "AMI ID:"
+        print '{0}'.format(ami_text)
+
+        ## Lets get the image state before doing anything
+        # I want to not delete the message or try to set permissions of the state is pending
+        #    imagestate = ec2.Image('ami-7bd6116d')
+        #    print imagestate[0]
+
+        ## Lets get the image state before doing anything
+        # I want to not delete the message or try to set permissions of the state is pending
+        # imagestate = ec2.Image('ami-b7bc7ea1')
+        # print imagestate
+
+        # get image description attribute
+        # response = imagestate.describe_attribute(
+        #    DryRun=False,
+        #    Attribute='description'
+        #    )
+        # print response
+
+
+
+        ## okay, now set permissions on AMI we pulled from sqs
+        # modify image and snapshot attributes to share it with an external aws account
+        # myimageid = AMIid['ImageId']
+        # myimageid = 'ami-7bd6116d'
+        # print 'image attribute id that we use:'
+        # print myimageid
+        shareami = ec.modify_image_attribute(
+            ImageId=ami_text,
+            LaunchPermission={
+                'Add': [
+                    {
+                        'UserId': destinationawsaccount
+                    },
+                ]
+            }
+        )
+
+        ## this is pulled from the image cleanup function
+        ## probably use this as a way to loop through and pull multiple ami ids from sqs
+        ## so this function only needs to run
+        snapshots = ec.describe_snapshots(MaxResults=1000, OwnerIds=[sourceawsaccount])['Snapshots']
+
+        # loop through list of image IDs
+        #        for image in ami_text:
+        #            print "setting permissions to image %s" % image
+        #            amiResponse = ec.deregister_image(
+        #                DryRun=False,
+        #                ImageId=image,
+        #            )
+        # print "snapshots var output:"
+        # print snapshots
+        for snapshot in snapshots:
+            if snapshot['Description'].find(ami_text) > 0:
+                snapid = snapshot['SnapshotId']
+                print "snapid var output:"
+                print snapid
+                sharesnap = ec.modify_snapshot_attribute(
+                    SnapshotId=snapid,
+                    CreateVolumePermission={
+                        'Add': [
+                            {
+                                'UserId': destinationawsaccount
+                            },
+                        ]
+                    }
+                )
+
+                # Send AMI ID and Snapshot ID to queue for copying
+                queue = sqs.get_queue_by_name(QueueName='dr_amibackup_pending_copy')
+                response = queue.send_message(MessageBody='AMI Created, permissions set, needs cross-account copy',
+                                              MessageAttributes={
+                                                  'AMIID': {
+                                                      'StringValue': '{0}'.format(ami_text),
+                                                      'DataType': 'String'
+                                                  },
+                                                  'IMAGEDESCRIPTION': {
+                                                      'StringValue': '{0}'.format(imagedescription),
+                                                      'DataType': 'String'
+                                                  },
+                                                  'IMAGENAME': {
+                                                      'StringValue': '{0}'.format(imagename),
+                                                      'DataType': 'String'
+                                                  },
+                                                  'TAGDELETEON': {
+                                                      'StringValue': '{0}'.format(tagdeleteon),
+                                                      'DataType': 'String'
+                                                  }
+                                              })
+                print 'Values added to queue, we got this response:'
+                print(response.get('MessageId'))
+                print(response.get('MD5OfMessageBody'))
+
+
+
+
+
+

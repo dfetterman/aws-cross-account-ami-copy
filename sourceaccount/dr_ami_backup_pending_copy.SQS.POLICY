@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Id": "arn:aws:sqs:us-east-1:SOURCEAWSACCOUNT-NO:dr_amibackup_pending_copy/SQSDefaultPolicy",
+  "Statement": [
+    {
+      "Sid": "Sid1487179144260",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::DESTINATIONAWSACCOUNT-NO:root"
+      },
+      "Action": [
+        "SQS:SendMessage",
+        "SQS:ReceiveMessage",
+        "SQS:DeleteMessage",
+        "SQS:GetQueueUrl",
+        "SQS:GetQueueAttributes",
+        "SQS:ChangeMessageVisibility"
+      ],
+      "Resource": "arn:aws:sqs:us-east-1:DESTINATIONAWSACCOUNT-NO:dr_amibackup_pending_copy"
+    }
+  ]
+}

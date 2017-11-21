@@ -1,0 +1,67 @@
+import boto3
+import collections
+import datetime
+import time
+import sys
+
+
+client = boto3.client('ec2', 'us-east-1')
+ec2 = boto3.resource('ec2', 'us-east-1')
+awsaccount = 'DESTINATIONAWSACCOUNT-NO'
+
+images = ec2.images.filter(Owners =[awsaccount]) 
+
+def lambda_handler(event, context):
+    imagesList = []
+    imageCount = 0
+    to_tag = collections.defaultdict(list)
+
+    # check if image has a DeleteOn tag and a value
+    for image in images:
+        if image.tags is not None: 
+            for t in image.tags:
+                if t['Key'] == 'DeleteOn' and t.get('Value') is  not None:
+
+                # getting today's date
+                    today_time = datetime.datetime.now().strftime('%m-%d-%Y')
+                    today_date = time.strptime(today_time, '%m-%d-%Y')
+
+                #getting images' DeleteOn date
+                    deletion_date= t['Value']
+                    delete_date = time.strptime(deletion_date, "%m-%d-%Y");
+
+                # If image's DeleteOn date is less than or equal to today,
+                # add this image to our list of images to process later
+                    if delete_date <= today_date:
+                        # count images
+                        imageCount += 1
+                        imagesList.append(image.id)
+        
+    #show output
+    print("There is a total of " + str(imageCount) + " AMIs that will be deleted")
+    print ("Here is a list: ")
+    print imagesList
+    
+    #if there's at least 1 image to be deregistered, gets snapshots from that image
+    if imageCount != 0:
+        snapshots = client.describe_snapshots(MaxResults=1000, OwnerIds=[awsaccount])['Snapshots']
+
+    # loop through list of image IDs and deregister images
+        for image in imagesList:
+            print ("deregistering image %s" % image)
+            response = client.deregister_image(
+                DryRun=False,
+                ImageId=image,
+            )
+
+            for snapshot in snapshots:
+                if snapshot['Description'].find(image) > 0:
+                    snap = client.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
+                    print "Deleting snapshot " + snapshot['SnapshotId']
+                    print "-------------"
+    else:
+        print "No images found to be deleted"
+
+
+
+

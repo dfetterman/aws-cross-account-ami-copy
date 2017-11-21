@@ -1,0 +1,113 @@
+# Step 3
+# This function copies an ami that has been shared with the destination aws account
+# It pulls the ami id from a queue prior to processing
+
+import boto3
+import collections
+
+
+# Get the service resource
+sqs = boto3.resource('sqs')
+ec = boto3.client('ec2')
+
+
+#  getting image info requires it
+# ec2 = boto3.resource('ec2')
+
+def lambda_handler(event, context):
+    sourceawsaccount = 'SOURCEAWSACCOUNT-NO'    
+    while True:
+        # Get the queue
+        queue = sqs.get_queue_by_name(QueueName='dr_amibackup_pending_copy', QueueOwnerAWSAccountId=sourceawsaccount)
+        imagename = 'novarset'
+        imagedescription = 'novarset'
+        tagdeleteon = 'novarset'
+        for message in queue.receive_messages(
+                MessageAttributeNames=['AMIID', 'IMAGEDESCRIPTION', 'IMAGENAME', 'TAGDELETEON']):
+            ami_text = 'NO AMI ID ATTRIBUTE IN THIS MESSAGE'
+            imagedescription = message.message_attributes.get('IMAGEDESCRIPTION').get('StringValue')
+            global imagedescription
+            imagename = message.message_attributes.get('IMAGENAME').get('StringValue')
+            tagdeleteon = message.message_attributes.get('TAGDELETEON').get('StringValue')
+            if message.message_attributes is not None:
+                ami_id = message.message_attributes.get('AMIID').get('StringValue')
+                if ami_id:
+                    ami_text = '{0}'.format(ami_id)
+                    global ami_text
+        message.delete()
+        print "-------------"
+        print 'Begin variables from sqs:'
+        print imagedescription
+        print imagename
+        print tagdeleteon
+        print 'End variables from sqs'
+        if imagedescription is 'novarset':
+            print 'No messages left in queue, breaking'
+            break
+        print "-------------"
+        # print('Hello, {0}! ({1})'.format(message.body, ami_text))
+
+        print "AMI ID:"
+        print '{0}'.format(ami_text)
+
+        # some code to describe an image
+        #    myimagedetails = ec.describe_images(
+        #        ImageIds=[
+        #            ami_text,
+        #            ]
+        #            )
+        #    print 'value of myimagedetails:'
+        #    print myimagedetails
+        #    print myimagedetails[0]
+
+
+
+
+
+
+        # perform actual copy of ami
+        print 'performing image copy of ami:'
+        print ami_text
+        copyami = ec.copy_image(
+            DryRun=False,
+            SourceRegion='us-east-1',
+            SourceImageId=ami_text,
+            Name=imagename,
+            Description=imagedescription,
+        )
+        # After image copy, we need to tag it.
+        # tag image code goes here
+
+        # Get the result of the copyami function
+        to_tag = collections.defaultdict(list)
+        to_tag[tagdeleteon].append(copyami['ImageId'])
+
+        print 'printing value of to_tag.keys():'
+        print to_tag.keys()
+
+        #    for tagdeleteon in to_tag.keys():
+        #        delete_date = datetime.date.today() + datetime.timedelta(days=retention_days)
+        #        delete_fmt = delete_date.strftime('%m-%d-%Y')
+        #        print "Will delete %d AMIs on %s" % (len(to_tag[retention_days]), delete_fmt)
+
+        print "printing value of to_tag which is a dict:"
+        print to_tag
+
+        print "performing tag"
+        ec.create_tags(
+            Resources=to_tag[tagdeleteon],
+            Tags=[
+                {'Key': 'DeleteOn', 'Value': tagdeleteon},
+                {'Key': 'CrossAccntRepli', 'Value': 'true'},
+            ]
+        )
+
+        print('Hello, {0}! ({1})'.format(message.body, ami_text))
+
+        print "AMI ID:"
+        print '{0}'.format(ami_text)
+
+# else:
+#        print "No pending AMIs requiring copy action."
+
+
