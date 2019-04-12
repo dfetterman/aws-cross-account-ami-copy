@@ -2,8 +2,6 @@
 
 This was created to provide an additional layer of isolation for AMI snapshots.
 
-A github like service [Codespaces](https://www.infoworld.com/article/2608076/murder-in-the-amazon-cloud.html) that was hosted on AWS was compromised and all resources within their AWS account were deleted, including their backups.
-
 ## Getting Started
 
 Please note that this utilizes queues in a way that I probably wouldn't do now that Lambda step functions have been released. April 2019
