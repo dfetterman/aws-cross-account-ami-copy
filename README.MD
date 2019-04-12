@@ -1,15 +1,16 @@
-# Project Title
+# Automated cross-account AMI creation lambda function.
 
-Automated cross-account AMI creation lambda function.
+This was created to provide an additional layer of isolation for AMI snapshots.
 
 A github like service [Codespaces](https://www.infoworld.com/article/2608076/murder-in-the-amazon-cloud.html) that was hosted on AWS was compromised and all resources within their AWS account were deleted, including their backups.
-This was created to provide an additional layer of isolation.
 
 ## Getting Started
 
-Please note that this utilizes queues in a way that I probably wouldn't do now that Lambda step functions have been released. Also, I'd probably use serverless or zappa to package and deploy if I were to ever revisit this. April 2019
+Please note that this utilizes queues in a way that I probably wouldn't do now that Lambda step functions have been released. April 2019
 
 ### Installing
+
+I'd probably use serverless or zappa to package and deploy if I were to ever revisit this. April 2019
 
 For install steps, look inside the individual directories.
 
