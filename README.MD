@@ -1,3 +1,5 @@
+# UPDATE 12/2020 - This type of functionality has been introduced to the AWS console so this code is no longer needed.
+
 # Automated cross-account AMI creation lambda function.
 
 This was created to provide an additional layer of isolation for AMI snapshots.
